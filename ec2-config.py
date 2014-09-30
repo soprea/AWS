@@ -29,13 +29,15 @@ def parse_args():
 
     parser.add_argument('--prefix', type=str, default='',
         help='prefix to the instance name')
+    parser.add_argument('--ip_ltm', type=str, default='',
+        help='ip to add to the ltm vip')
     parser.add_argument('--suffix', type=str, default='',
         help='suffix to the instance name')
     parser.add_argument('--domain', type=str, default='',
         help='domain to the instance name')
 
-    parser.add_argument('--format', choices=['ssh', 'hosts', 'ltm_node', 'ltm_pool'], default='ssh',
-        help='output format. ssh-config or hosts or ltm_node or ltm_pool file style. ')
+    parser.add_argument('--format', choices=['ssh', 'hosts', 'ltm_node', 'ltm_pool', 'ltm_vip'], default='ssh',
+        help='output format. ssh-config or hosts or ltm_node or ltm_pool or ltm_vip file style. ')
     parser.add_argument('--filter', type=str, action='append', default=[],
         help=('Amazon EC2 API filter to limit the result returned. '
               '(Example: --filter instance-state-name=running)'))
@@ -55,6 +57,7 @@ def main(opts):
     domain = opts['domain']
     format = opts['format']
     filter = opts['filter']
+    ip = opts['ip_ltm']
     use_elastic_ip = opts['use_elastic_ip']
 
     filters = dict([f.split('=', 1) for f in filter])
@@ -97,9 +100,10 @@ def main(opts):
        print_fn = print_ltm_node
     elif format == 'ltm_pool':
        print_fn = print_ltm_pool
+    elif format == 'ltm_vip':
+       print_fn = print_ltm_vip
 
     print_fn(instances, prefix, suffix, domain)
-
 
 def get_ec2_instances(conn, name_tag, ip_addr_attr, filters):
     instances = []  # (instance_name, ip_address)
@@ -149,7 +153,6 @@ def print_ltm_node(instances, prefix, suffix, domain):
 def print_ltm_pool(instances, prefix, suffix, domain):
     """ Print out as ltm node file format in order to copy paste in F5 V.11"""
     print "================================================================================================================\n"
-    print prefix,suffix,domain
     dict_data = dict()
     for instance_name, ip_address in instances:
         if ' ' in instance_name:
@@ -173,6 +176,19 @@ def print_ltm_pool(instances, prefix, suffix, domain):
         print value+' }'
     print "================================================================================================================\n"
     print "Watch after F5/NAT/ADM/BASTION node, maybe you don't need them.\nCheck the domain also. \n "
+
+def print_ltm_vip(instances, prefix, suffix, domain):
+    """ Print out as ltm vip file format in order to copy paste in F5 V.11"""
+    print "================================================================================================================\n"
+    dict2 = dict()
+    pools = open('pools','r').read().split('\n')
+    for pool in pools:
+        app_port = pool[-4:]
+        app1 = pool[4:]
+        app2 = app1[:-10]
+        app = app2
+        print "create ltm virtual mct-%s-vip-%s {destination %s ip-protocol tcp mask 255.255.255.255 pool %s source 0.0.0.0/0 source-address-translation {type automap } profiles add {tcp{} http{}}}" % (app, prefix, prefix+':'+app_port, pool)
+
 
 if __name__ == '__main__':
     args = vars(parse_args())
